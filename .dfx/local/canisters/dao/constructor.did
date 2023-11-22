@@ -1,0 +1,42 @@
+type Subaccount = blob;
+type Result_1 = 
+ variant {
+   err: text;
+   ok: Member;
+ };
+type Result = 
+ variant {
+   err: text;
+   ok;
+ };
+type Member = 
+ record {
+   age: nat;
+   name: text;
+ };
+type DAO = 
+ service {
+   addGoal: (text) -> ();
+   addMember: (Member) -> (Result);
+   balanceOf: (Account) -> (nat) query;
+   getAllMembers: () -> (vec Member) query;
+   getGoals: () -> (vec text) query;
+   getManifesto: () -> (text) query;
+   getMember: (principal) -> (Result_1) query;
+   getName: () -> (text) query;
+   mint: (principal, nat) -> ();
+   numberOfMembers: () -> (nat) query;
+   removeMember: () -> (Result);
+   setManifesto: (text) -> ();
+   tokenName: () -> (text) query;
+   tokenSymbol: () -> (text) query;
+   totalSupply: () -> (nat) query;
+   transfer: (Account, Account, nat) -> (Result);
+   updateMember: (Member) -> (Result);
+ };
+type Account = 
+ record {
+   owner: principal;
+   subaccount: opt Subaccount;
+ };
+service : () -> DAO

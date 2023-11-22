@@ -1,0 +1,13 @@
+{
+  "canisters": {
+    "dao": {
+      "type": "motoko",
+      "main": "src/main.mo"
+    }
+  },
+  "defaults": {
+    "build": {
+      "packtool": "mops sources"
+    }
+  }
+}

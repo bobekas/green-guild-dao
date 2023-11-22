@@ -53,6 +53,8 @@ module {
         #AlreadyVoted;
         #ProposalEnded;
         #NotImplemented; // This is just a placeholder for the template to compile - can be removed
+        #NotEnoughTokens;
+        #NotDAOMember;
     };
 
     public type VoteResult = Result<VoteOk, VoteErr>;

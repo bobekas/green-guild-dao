@@ -12,57 +12,36 @@ import TrieMap "mo:base/TrieMap";
 import Hash "mo:base/Hash";
 import Int "mo:base/Int";
 import Account "account";
-import Types "../test/types";
+import Types "./types";
+import Logo "./logo";
 
 actor class DAO() = this {
   public type Result<Ok, Err> = Result.Result<Ok, Err>;
   public type HashMap<K, V> = HashMap.HashMap<K, V>;
   public type TrieMap<K, V> = TrieMap.TrieMap<K, V>;
 
-  public type Member = {
-    name : Text;
-    age : Nat;
-  };
+  public type DAOInfo = Types.DAOInfo;
+  public type Member = Types.Member;
 
-  public type Subaccount = Blob;
-  public type Account = {
-      owner : Principal;
-      subaccount : ?Subaccount;
-  };
+  public type Subaccount = Types.Subaccount;
+  public type Account = Types.Account;
 
-  public type Status =  {
-    #Open;
-    #Accepted;
-    #Rejected;
-  };
+  public type Status =  Types.Status;
+  public type Proposal = Types.Proposal;
 
-  public type Proposal = {
-    id : Nat;
-    status : Status;
-    manifest : Text;
-    votes : Int;
-    voters : [Principal];
-  };
-
-  public type CreateProposalOk = Nat;
-
-  public type CreateProposalErr = {
-    #NotDAOMember;
-    #NotEnoughTokens;
-    #NotImplemented; // This is just a placeholder - can be removed once you start Level 4
-  };
-
-  public type CreateProposalResult = Result<CreateProposalOk, CreateProposalErr>;
+  public type CreateProposalOk = Types.CreateProposalOk;
+  public type CreateProposalErr = Types.CreateProposalErr;
+  public type CreateProposalResult = Types.CreateProposalResult;
 
   public type VoteOk = Types.VoteOk;
-
   public type VoteErr = Types.VoteErr;
-
-  public type VoteResult = Result<VoteOk, VoteErr>;
+  public type VoteResult = Types.VoteResult;
 
   let name : Text = "GreenGuild";
   var manifesto : Text = "";
   var goals = Buffer.Buffer<Text>(1);
+
+  var logo : Text = Logo.getSvg();
 
   let members : HashMap<Principal, Member> = HashMap.HashMap<Principal, Member>(10, Principal.equal, Principal.hash);
 
@@ -74,7 +53,7 @@ actor class DAO() = this {
 
   // START - Meta functions
   public query func getName() : async Text {
-    "GreenGuild";
+    return name;
   };
 
   public query func getManifesto() : async Text {
@@ -91,6 +70,19 @@ actor class DAO() = this {
 
   public query func getGoals() : async [Text] {
     return Buffer.toArray<Text>(goals);
+  };
+
+  public query func getStats() : async DAOInfo {
+    let data : DAOInfo = {
+      name = name;
+      manifesto = manifesto;
+      goals = Buffer.toArray<Text>(goals);
+      member = _getMemberNames();
+      logo = logo;
+      numberOfMembers = members.size();
+    };
+
+    return data;
   };
   // END - Meta functions
 
@@ -208,6 +200,22 @@ actor class DAO() = this {
     };
 
     return Iter.toArray<Member>(memberIter);
+  };
+
+  private func _getMemberNames() : [Text] {
+    let entries = members.entries();
+    let memberIter : Iter.Iter<Text> = {
+      next = func () : ?Text {
+        switch (entries.next()) {
+          case (?(_, member)) {
+            return ?member.name;
+          };
+          case null { return null; };
+        };
+      };
+    };
+
+    return Iter.toArray<Text>(memberIter);
   };
 
   public query func numberOfMembers() : async Nat {

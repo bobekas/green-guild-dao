@@ -1,8 +1,15 @@
 import Result "mo:base/Result";
 import HashMap "mo:base/HashMap";
 module {
+    public type DAOInfo = {
+        name : Text;
+        manifesto : Text;
+        goals : [Text];
+        member : [Text];
+        logo : Text;
+        numberOfMembers : Nat;
+    };
 
-    // Level 2
     public type Member = {
         name : Text;
         age : Nat;
@@ -10,14 +17,12 @@ module {
     public type Result<A, B> = Result.Result<A, B>;
     public type HashMap<A, B> = HashMap.HashMap<A, B>;
 
-    // Level 3
     public type Subaccount = Blob;
     public type Account = {
         owner : Principal;
         subaccount : ?Subaccount;
     };
 
-    // Level 4
     public type Status = {
         #Open;
         #Accepted;

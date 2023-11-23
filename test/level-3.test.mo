@@ -1,5 +1,5 @@
 import main "../src/main";
-import Types "types";
+import Types "../src/types";
 import Nat "mo:base/Nat";
 import Array "mo:base/Array";
 import Option "mo:base/Option";

@@ -1,18 +1,25 @@
 import Result "mo:base/Result";
 import HashMap "mo:base/HashMap";
+import Principal "mo:base/Principal";
 module {
     public type DAOInfo = {
         name : Text;
         manifesto : Text;
-        goals : [Text];
         member : [Text];
         logo : Text;
         numberOfMembers : Nat;
     };
 
+    public type MemberRole = {
+        #AssetOwner;
+        #Contributor;
+        #FinancialSupporter;
+        #Volunteer;
+    };
+
     public type Member = {
         name : Text;
-        age : Nat;
+        roles : [MemberRole];
     };
     public type Result<A, B> = Result.Result<A, B>;
     public type HashMap<A, B> = HashMap.HashMap<A, B>;
@@ -29,20 +36,32 @@ module {
         #Rejected;
     };
 
+    public type ProposalType = {
+        #DecisionMaking;
+        #DocumentManagement;
+        #Newcomer;
+        // TODO: #FundsTransfer
+        // TODO: #RolesUpdate
+    };
+
     public type Proposal = {
         id : Nat;
+        createdBy : Principal;
+        proposalType : ProposalType;
+        description : Text;
         status : Status;
-        manifest : Text;
+        instruction : ?Text;
         votes : Int;
         voters : [Principal];
+        // TODO: endsAt 
     };
 
     public type CreateProposalOk = Nat;
 
     public type CreateProposalErr = {
+        #NotAllowed;
         #NotDAOMember;
-        #NotEnoughTokens;
-        #NotImplemented; // This is just a placeholder for the template to compile - can be removed
+        #InstructionRequired;
     };
 
     public type CreateProposalResult = Result<CreateProposalOk, CreateProposalErr>;
@@ -57,9 +76,9 @@ module {
         #ProposalNotFound;
         #AlreadyVoted;
         #ProposalEnded;
-        #NotImplemented; // This is just a placeholder for the template to compile - can be removed
         #NotEnoughTokens;
         #NotDAOMember;
+        #NotAllowed;
     };
 
     public type VoteResult = Result<VoteOk, VoteErr>;

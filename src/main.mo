@@ -12,10 +12,10 @@ import TrieMap "mo:base/TrieMap";
 import Hash "mo:base/Hash";
 import Int "mo:base/Int";
 import Blob "mo:base/Blob";
+import IterType "mo:base/IterType";
 import Account "account";
 import Types "./types";
 import Logo "./logo";
-import Http "./http";
 
 actor class DAO() = this {
   public type Result<Ok, Err> = Result.Result<Ok, Err>;
@@ -23,6 +23,7 @@ actor class DAO() = this {
   public type TrieMap<K, V> = TrieMap.TrieMap<K, V>;
 
   public type DAOInfo = Types.DAOInfo;
+  public type MemberRole = Types.MemberRole;
   public type Member = Types.Member;
 
   public type Subaccount = Types.Subaccount;
@@ -30,6 +31,7 @@ actor class DAO() = this {
 
   public type Status =  Types.Status;
   public type Proposal = Types.Proposal;
+  public type ProposalType = Types.ProposalType;
 
   public type CreateProposalOk = Types.CreateProposalOk;
   public type CreateProposalErr = Types.CreateProposalErr;
@@ -41,7 +43,6 @@ actor class DAO() = this {
 
   let name : Text = "Green Guild";
   var manifesto : Text = "GreenGuild envisions a harmonious blend of community living and sustainable practices, driven by innovative technology.";
-  var goals = Buffer.Buffer<Text>(1);
 
   var logo : Text = Logo.getSvg();
 
@@ -62,23 +63,10 @@ actor class DAO() = this {
     return manifesto;
   };
 
-  public func setManifesto(value : Text) : async () {
-    manifesto := value;
-  };
-
-  public func addGoal(value : Text) : async () {
-    goals.add(value);
-  };
-
-  public query func getGoals() : async [Text] {
-    return Buffer.toArray<Text>(goals);
-  };
-
   public query func getStats() : async DAOInfo {
     let data : DAOInfo = {
       name = name;
       manifesto = manifesto;
-      goals = Buffer.toArray<Text>(goals);
       member = _getMemberNames();
       logo = logo;
       numberOfMembers = members.size();
@@ -89,6 +77,7 @@ actor class DAO() = this {
   // END - Meta functions
 
   // START - Ledger functions
+  // ТОДО: Depricate and remove after Ledger Canister integration
   public query func tokenName() : async Text {
     return "Eco Credits";
   };
@@ -111,7 +100,6 @@ actor class DAO() = this {
     totalSupplyValue := Nat.add(totalSupplyValue, amount);
   };
 
-  //Transfers a specified amount from the 'from' account to the 'to' account.
   public func transfer(from: Account, to: Account, amount: Nat) : async Result<(), Text> {
     let senderBalance = ledger.get(from);
 
@@ -147,19 +135,87 @@ actor class DAO() = this {
   // END - Ledger functions
 
   // START - Member functions
-  public shared ({ caller }) func addMember(member : Member) : async Result<(), Text> {
+  public shared ({ caller }) func createContributeMember(name : Text) : async Result<(), Text> {
     //Check if caller is not anoymous
     // if(Principal.equal(caller, Principal.fromText("2vxsx-fae"))) {
     //   return #err("Anonymous users are not allowed to add members.");
     // };
 
+    // TODO: Validate that the member is locked in 1 ICP
+    if(false) {
+      return #err("Lock 1 ICP to become a member");
+    };
+
+    let memberResult = members.get(caller);
+
+    //If member already exists:
+    // Case 1 - If Volunteer update it to Contributor
+    // Case 2 - Otherwise Return error
+    switch(memberResult) {
+      case(null) {};
+      case(?m) {
+        if(m.roles.size() == 1 and m.roles[0] == #Volunteer) {
+          members.put(caller, {
+            name = name;
+            roles = [#Contributor];
+          });
+
+          return #ok;
+        } else {
+          return #err("A member with the same identifier already exists.");
+        };
+      };
+    };
+
+    // Check for open Newcomer proposal, if exists -> #Reject
+    let newcomerProposalsResult : ?(Nat, Proposal) = Iter.filter(proposals.entries(), func(a : (Nat, Proposal)) : Bool { a.1.createdBy == caller and a.1.proposalType == #Newcomer; }).next();
+
+    switch(newcomerProposalsResult) {
+      case(null) {
+
+      };
+      case(?newcomerProposalsResult) {
+        let updatedProposal : Proposal = {
+          id = newcomerProposalsResult.1.id;
+          createdBy = newcomerProposalsResult.1.createdBy;
+          status = #Rejected;
+          description = newcomerProposalsResult.1.description;
+          proposalType = newcomerProposalsResult.1.proposalType;
+          instruction = newcomerProposalsResult.1.instruction;
+          votes = newcomerProposalsResult.1.votes;
+          voters = newcomerProposalsResult.1.voters;
+        };
+
+        proposals.put(newcomerProposalsResult.0, updatedProposal);
+      };
+    };
+
+    let member = _createMember(name, caller, [#Contributor]);
+
+    return #ok;
+  };
+
+  public shared ({ caller}) func createNewcomerProposal(name : Text) : async Result<(), Text> {
     if(members.get(caller) != null) {
       return #err("A member with the same identifier already exists.");
     };
 
-    members.put(caller, member);
+    let proposalsIter = proposals.vals();
+    let existingNewcomerProposal = Iter.filter<(Proposal)>(proposalsIter, func (item : Proposal) : Bool {
+      item.createdBy == caller and item.proposalType == #Newcomer;
+    });
 
-    return #ok;
+    switch(existingNewcomerProposal.next()) {
+      case(null) {
+      };
+      case(_) {
+        return #err("Newcomer proposal already exists.");
+      };
+    };
+
+    let proposal = _createNewProposal(#Newcomer, name # " wants to join as a volunteer.", caller, ?name);
+
+    return #ok();
   };
 
   public query func getMember(principal : Principal) : async Result<Member, Text> {
@@ -171,21 +227,6 @@ actor class DAO() = this {
       };
       case (?member) {
         return #ok(member);
-      };
-    };
-  };
-
-  public shared ({ caller }) func updateMember(updatedMemberData : Member) : async Result<(), Text> {
-    let memberData : ?Member = members.get(caller);
-
-    switch (memberData) {
-      case (null) {
-        return #err("Member not found.");
-      };
-      case (?member) {
-        members.put(caller, updatedMemberData);
-
-        return #ok();
       };
     };
   };
@@ -204,43 +245,50 @@ actor class DAO() = this {
     return Iter.toArray<Member>(memberIter);
   };
 
-  private func _getMemberNames() : [Text] {
-    let entries = members.entries();
-    let memberIter : Iter.Iter<Text> = {
-      next = func () : ?Text {
-        switch (entries.next()) {
-          case (?(_, member)) {
-            return ?member.name;
-          };
-          case null { return null; };
+  // This function clears all roles of a member
+  public shared ({ caller }) func removeMember() : async Result<(), Text> {
+    let memberData : ?Member = members.get(caller);
+
+    switch (memberData) {
+      case (null) {
+        return #err("Member not found.");
+      };
+      case (?member) {
+        let a : Member = {
+          name = member.name;
+          roles = [];
         };
+
+        members.put(caller, a);
+
+        return #ok();
       };
     };
-
-    return Iter.toArray<Text>(memberIter);
-  };
-
-  public query func numberOfMembers() : async Nat {
-    return members.size();
-  };
-
-  public shared ({ caller }) func removeMember() : async Result<(), Text> {
-    //Check if caller is not anoymous
-    // if(Principal.equal(caller, Principal.fromText("2vxsx-fae"))) {
-    //   return #err("Anonymous users are not allowed to remove members.");
-    // };
-
-    members.delete(caller);
 
     return #ok();
   };
   // END - Member functions
 
   // START - Proposal functions
-  public shared ({ caller }) func createProposal(manifest : Text) : async CreateProposalResult {
+  public shared ({ caller }) func createProposal(proposalType : ProposalType, description : Text, instruction : ?Text) : async CreateProposalResult {
+    let member = members.get(caller);
+
     // Check if the caller is a DAO member
-    if (members.get(caller) == null) {
-      return #err(#NotDAOMember);
+    switch(member) {
+      case(null) {
+        return #err(#NotDAOMember);
+      };
+      case(?m) {
+        // If Volunteer return error
+        if(Array.find<MemberRole>(m.roles, func x = x == #Volunteer) != null) {
+          return #err(#NotAllowed);
+        }
+      };
+    };
+
+    // Check if instruction is required but not provided
+    if (_isInstructionRequired(proposalType) and instruction == null) {
+        return #err(#InstructionRequired);
     };
 
     // Check if the caller has at least 1 token
@@ -249,33 +297,16 @@ actor class DAO() = this {
       subaccount = null;
     };
 
-    let callerBalance = Option.get(ledger.get(callerAccount), 0);
-    if (callerBalance < 1) {
-      return #err(#NotEnoughTokens);
-    };
-
-    // Deduct 1 token for creating a proposal (burning it)
-    ledger.put(callerAccount, Nat.sub(callerBalance, 1));
-    totalSupplyValue := Nat.sub(totalSupplyValue, 1);
-
-    // Create a new proposal
-    let proposalId = nextProposalId;
-    let newProposal : Proposal = {
-      id = proposalId;
-      status = #Open;
-      manifest = manifest;
-      votes = 0;
-      voters = [];
-    };
-
-    // Store the proposal
-    proposals.put(proposalId, newProposal);
-
-    // Increment the nextProposalId
-    nextProposalId := Nat.add(nextProposalId, 1);
+    let proposal = _createNewProposal(proposalType, description, caller, instruction);
 
     // Return success with the new proposal's ID
-    return #ok(proposalId);
+    return #ok(proposal.id);
+  };
+
+  public query func getAllProposals() : async [(Nat, Proposal)] {
+    let entries = proposals.entries();
+
+    return Iter.toArray<(Nat, Proposal)>(entries);
   };
 
   public query func getProposal(id : Nat) : async ?Proposal {
@@ -284,9 +315,19 @@ actor class DAO() = this {
   };
 
   public shared ({ caller }) func vote(id : Nat, vote : Bool) : async VoteResult {
+    let member = members.get(caller);
+
     // Check if the caller is a DAO member
-    if (members.get(caller) == null) {
-      return #err(#NotDAOMember);
+    switch(member) {
+      case(null) {
+        return #err(#NotDAOMember);
+      };
+      case(?m) {
+        // If Volunteer return error
+        if(Array.find<MemberRole>(m.roles, func x = x == #Volunteer) != null) {
+          return #err(#NotAllowed);
+        }
+      };
     };
 
     // Retrieve the proposal
@@ -312,10 +353,7 @@ actor class DAO() = this {
           subaccount = null;
         };
 
-        let callerBalance = Option.get(ledger.get(callerAccount), 0);
-        if (callerBalance < 1) {
-          return #err(#NotEnoughTokens);
-        };
+        // TODO: Voting power based on member score...
 
         // Process the vote
         let voteChange = if (vote) { 1 } else { -1 };
@@ -323,21 +361,22 @@ actor class DAO() = this {
         let updatedVoters = Array.append<Principal>(proposal.voters, [caller]);
         var updatedStatus : Status = proposal.status;
 
-        // Burn 1 token for voting
-        ledger.put(callerAccount, Nat.sub(callerBalance, 1));
-        totalSupplyValue := Nat.sub(totalSupplyValue, 1);
+        let majorityRequired = members.size() / 2; // More than 50%
 
         // Update vote status
-        if (updatedVotes >= 10) { // Assuming 10 votes are needed for acceptance
+        if (updatedVotes > majorityRequired) { // Assuming 10 votes are needed for acceptance
           updatedStatus := #Accepted;
-        } else if (updatedVotes <= -10) { // Assuming -10 votes for refusal
+        } else if (Int.abs(updatedVotes) >= majorityRequired) { // Assuming -10 votes for refusal
           updatedStatus := #Rejected;
         };
 
         let updatedProposal : Proposal = {
           id = proposal.id;
+          createdBy = proposal.createdBy;
           status = updatedStatus;
-          manifest = proposal.manifest;
+          description = proposal.description;
+          proposalType = proposal.proposalType;
+          instruction = proposal.instruction;
           votes = updatedVotes;
           voters = updatedVoters;
         };
@@ -350,9 +389,17 @@ actor class DAO() = this {
             return #ok(#ProposalOpen);
           };
           case(#Accepted) {
-            // Update DAO's manifesto
-            manifesto := proposal.manifest;
-            
+            // TODO:
+            // Use a "Commit Point" variable to indicate whether the proposal's instructions have been executed. 
+            // This will help prevent issues related to transaction failures or traps in the system.
+            switch(proposal.proposalType) {
+              case(#Newcomer) {
+                let member = _createMember(Option.get(proposal.instruction, "Unknown"), proposal.createdBy, [#Volunteer]);
+              };
+              case(_) {
+
+              };
+            };
             return #ok(#ProposalAccepted);
           };
           case(#Rejected) {
@@ -364,50 +411,62 @@ actor class DAO() = this {
   };
   // END - Proposal functions
 
-  // START - Web/HTTP functions
-  func _getWebpage() : Text {
-    var webpage = "<style>" #
-      "body { text-align: center; font-family: Arial, sans-serif; background-color: #f0f8ff; color: #333; }" #
-      "h1 { font-size: 3em; margin-bottom: 10px; }" #
-      "hr { margin-top: 20px; margin-bottom: 20px; }" #
-      "em { font-style: italic; display: block; margin-bottom: 20px; }" #
-      "ul { list-style-type: none; padding: 0; }" #
-      "li { margin: 10px 0; }" #
-      "li:before { content: '👉 '; }" #
-      "svg { max-width: 150px; height: auto; display: block; margin: 20px auto; }" #
-      "h2 { text-decoration: underline; }" #
-      "</style>";
-
-    webpage := webpage # "<div><h1>The " # name # "</h1></div>";
-    webpage := webpage # "<em>" # manifesto # "</em>";
-    webpage := webpage # "<div>" # logo # "</div>";
-    webpage := webpage # "<hr>";
-    webpage := webpage # "<h2>Our goals:</h2>";
-    webpage := webpage # "<ul>";
-
-    for (goal in goals.vals()) {
-      webpage := webpage # "<li>" # goal # "</li>";
-    };
-
-    webpage := webpage # "</ul>";
-    return webpage;
-  };
-
-  public type HttpRequest = Http.Request;
-  public type HttpResponse = Http.Response;
-
-  public query func http_request(request : HttpRequest) : async HttpResponse {
-    let response = {
-      body = Text.encodeUtf8(_getWebpage());
-      headers = [("Content-Type", "text/html; charset=UTF-8")];
-      status_code = 200 : Nat16;
-      streaming_strategy = null
-    };
-    return(response);
-  };
-  // END - Web/HTTP functions
-
   public shared ({ caller }) func whoami() : async Principal {
     caller;
+  };
+
+  // Helper function to determine if instruction is required for a proposal type
+  private func _isInstructionRequired(proposalType: ProposalType): Bool {
+    return proposalType == #DocumentManagement;
+  };
+
+  private func _createMember(name : Text, memberPrincipal : Principal, roles : [MemberRole]) : Member {
+    let member : Member = {
+      name = name;
+      roles = roles;
+    };
+
+    members.put(memberPrincipal, member);
+
+    return member;
+  };
+
+  private func _createNewProposal(proposalType : ProposalType, description : Text, createdBy : Principal, instruction : ?Text) : Proposal {
+    // Create a new proposal
+    let proposalId = nextProposalId;
+    let newProposal: Proposal = {
+        id = proposalId;
+        createdBy = createdBy;
+        proposalType = proposalType;
+        description = description;
+        status = #Open;
+        instruction = instruction;
+        votes = 0;
+        voters = [];
+    };
+
+    // Store the proposal
+    proposals.put(proposalId, newProposal);
+
+    // Increment the nextProposalId
+    nextProposalId := Nat.add(nextProposalId, 1);
+
+    return newProposal;
+  };
+
+  private func _getMemberNames() : [Text] {
+    let entries = members.entries();
+    let memberIter : Iter.Iter<Text> = {
+      next = func () : ?Text {
+        switch (entries.next()) {
+          case (?(_, member)) {
+            return ?member.name;
+          };
+          case null { return null; };
+        };
+      };
+    };
+
+    return Iter.toArray<Text>(memberIter);
   };
 };

@@ -11,9 +11,11 @@ import Option "mo:base/Option";
 import TrieMap "mo:base/TrieMap";
 import Hash "mo:base/Hash";
 import Int "mo:base/Int";
+import Blob "mo:base/Blob";
 import Account "account";
 import Types "./types";
 import Logo "./logo";
+import Http "./http";
 
 actor class DAO() = this {
   public type Result<Ok, Err> = Result.Result<Ok, Err>;
@@ -37,8 +39,8 @@ actor class DAO() = this {
   public type VoteErr = Types.VoteErr;
   public type VoteResult = Types.VoteResult;
 
-  let name : Text = "GreenGuild";
-  var manifesto : Text = "";
+  let name : Text = "Green Guild";
+  var manifesto : Text = "GreenGuild envisions a harmonious blend of community living and sustainable practices, driven by innovative technology.";
   var goals = Buffer.Buffer<Text>(1);
 
   var logo : Text = Logo.getSvg();
@@ -361,6 +363,49 @@ actor class DAO() = this {
     };
   };
   // END - Proposal functions
+
+  // START - Web/HTTP functions
+  func _getWebpage() : Text {
+    var webpage = "<style>" #
+      "body { text-align: center; font-family: Arial, sans-serif; background-color: #f0f8ff; color: #333; }" #
+      "h1 { font-size: 3em; margin-bottom: 10px; }" #
+      "hr { margin-top: 20px; margin-bottom: 20px; }" #
+      "em { font-style: italic; display: block; margin-bottom: 20px; }" #
+      "ul { list-style-type: none; padding: 0; }" #
+      "li { margin: 10px 0; }" #
+      "li:before { content: '👉 '; }" #
+      "svg { max-width: 150px; height: auto; display: block; margin: 20px auto; }" #
+      "h2 { text-decoration: underline; }" #
+      "</style>";
+
+    webpage := webpage # "<div><h1>The " # name # "</h1></div>";
+    webpage := webpage # "<em>" # manifesto # "</em>";
+    webpage := webpage # "<div>" # logo # "</div>";
+    webpage := webpage # "<hr>";
+    webpage := webpage # "<h2>Our goals:</h2>";
+    webpage := webpage # "<ul>";
+
+    for (goal in goals.vals()) {
+      webpage := webpage # "<li>" # goal # "</li>";
+    };
+
+    webpage := webpage # "</ul>";
+    return webpage;
+  };
+
+  public type HttpRequest = Http.Request;
+  public type HttpResponse = Http.Response;
+
+  public query func http_request(request : HttpRequest) : async HttpResponse {
+    let response = {
+      body = Text.encodeUtf8(_getWebpage());
+      headers = [("Content-Type", "text/html; charset=UTF-8")];
+      status_code = 200 : Nat16;
+      streaming_strategy = null
+    };
+    return(response);
+  };
+  // END - Web/HTTP functions
 
   public shared ({ caller }) func whoami() : async Principal {
     caller;
